@@ -673,6 +673,66 @@
                     </div>
                 </div>
             </div>
+            <!--New stuff-->
+                <!-- Service suggestion UI block — paste near the booking form (e.g., next to the "Message / symptoms" textarea) -->
+                <div id="suggestionSection" class="mt-8 bg-[#2C2C40] p-6 rounded-lg shadow-xl border border-[#E00000] border-opacity-10">
+                    <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-2xl font-semibold text-white">Need help selecting services?</h3>
+                
+                        <!-- AI-powered badge -->
+                        <span class="inline-flex items-center gap-2 ml-2 text-sm font-medium text-[#E00000] bg-[#1A1A2E] border border-[#E00000] border-opacity-20 px-3 py-1 rounded-full shadow-sm"
+                            title="Suggestions are generated automatically (AI-assisted).">
+                        <!-- small pulsing dot -->
+                        <span aria-hidden="true" class="w-2 h-2 rounded-full bg-[#E00000] animate-pulse block"></span>
+                        AI-powered
+                        </span>
+                    </div>
+                
+                    <!-- optional short help link -->
+                    <a href="#learn-more-suggestions" class="text-gray-300 text-sm hover:text-white underline hidden sm:inline">How it works</a>
+                    </div>
+                
+                    <p class="text-gray-300 mb-4 mt-4">Describe your ailment or what you need and we'll suggest the most relevant services.</p>
+                
+                    <label for="suggestionPrompt" class="sr-only">Describe your ailment</label>
+                    <textarea id="suggestionPrompt" rows="3" placeholder="e.g., I have a severe toothache and swelling" class="w-full bg-[#1A1A2E] text-white placeholder-gray-400 border border-[#0F1E5E] rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-[#E00000]"></textarea>
+                
+                    <div class="flex flex-wrap items-center gap-3 mt-4">
+                    <button id="suggestBtn" class="bg-[#E00000] text-white px-6 py-2 rounded-full font-semibold hover:bg-[#C00000] transition-transform transform hover:scale-[1.02]">
+                        Suggest services
+                    </button>
+                
+                    <button id="clearSuggestions" class="bg-transparent text-[#E00000] border border-[#E00000] px-4 py-2 rounded-full hover:bg-[#E00000]/10">
+                        Clear
+                    </button>
+                
+                    <p id="suggestionStatus" class="text-gray-400 ml-4"></p>
+                    </div>
+                
+                    <!-- Results area -->
+                    <div id="suggestionResults" class="mt-6 hidden">
+                    <h4 class="text-lg font-semibold text-white mb-3">Suggested services</h4>
+                    <div id="suggestionsList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="text-gray-300">
+                        <span class="font-semibold text-white">Estimated total:</span>
+                        <span id="suggestedTotal" class="text-[#E00000] font-bold ml-2">₦0.00</span>
+                        </div>
+                
+                        <div class="flex gap-3">
+                        <button id="selectAllBtn" class="px-4 py-2 rounded-full bg-[#0F1E5E] text-white border border-[#0F1E5E] hover:bg-[#142a57]">
+                            Select All
+                        </button>
+                        <button id="applySuggestionsBtn" class="px-4 py-2 rounded-full bg-[#E00000] text-white hover:bg-[#C00000]">
+                            Use selected services
+                        </button>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            <!---->
             <div class="bg-[#2C2C40] p-8 rounded-lg shadow-2xl">
                 <form class="space-y-6">
                     <div>

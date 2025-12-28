@@ -940,5 +940,72 @@ def search_patients():
             return jsonify(response)
     except Exception as e:
         return {'response': f'{e}'}
+#updates start from here, first update, AI consultancy
+#this function generates the csv,dont mind the variable name in it, it is from FLING
+def generate_csv(prompt):
+    """
+    Sends a prompt to the Gemini API to request a full HTML template.
+    """
+    headers = {
+        "Content-Type": "application/json"
+    }
+    params = {
+        "key": API_KEY
+    }
+    
+    # The payload is structured to ask the model for a text response
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(GEMINI_URL, headers=headers, params=params, json=data, timeout=120)
+        
+        # Raise an exception for bad status codes
+        response.raise_for_status()
+
+        # Extract the HTML text from the response
+        response_json = response.json()
+        if 'candidates' in response_json and len(response_json['candidates']) > 0:
+            html_template = response_json['candidates'][0]['content']['parts'][0]['text']
+            return html_template
+        else:
+            print("Error: No candidates found in the response.")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        print(f"Network or API Error: {e}")
+        return None
+@app.route("/suggestion", methods=["POST"])
+def suggestion():
+    if request.method == "POST":
+        total = 0
+        services_info = {'services':[]}
+        data = request.json
+        #create suitable prompt with list of services available in database
+        ailment = data['prompt']
+        services = db.execute("SELECT name,price  FROM services")
+        prompt = f"Act as an AI Consultant. Analyze my ailment: [{ailment}]. Cross-reference this with our service catalog: [{services}]. Based on your consultation, identify the necessary and suggested services. Output the result strictly as a raw CSV string with no headers, no markdown blocks, and no conversational text. Use this format: service_name,price_in_kobo,is_suggested"
+        #send prompt to API
+        raw_csv = generate_csv(prompt)
+        #receive response as raw csv format , convert into workable form
+        raw_csv=raw_csv.replace('```', '')
+        split_data = raw_csv.split("\n")
+        for data in split_data:
+            entry = data.split(',')
+            services_info['services'].append{'name':entry[0], 'price':entry[1]}
+        #calculate total amount
+            total+=entry[1]
+        #return services, prices and total
+        return jsonify({'services':services_info,'total':total})
+
 if __name__=="__main__":
     app.run(debug=True, port=8000 )
