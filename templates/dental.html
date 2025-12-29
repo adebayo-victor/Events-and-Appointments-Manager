@@ -971,174 +971,218 @@
     <!-- NEW: Embedded JavaScript for Testimonials Overlay and OTP Forgot Password -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+
             // Suggestions widget JS for /suggestion endpoint
             // Place this file at static/assets/js/suggestions.js and include it in templates/dental.html
-            // It POSTs { prompt } as JSON to {BASE_URL}/suggestion and renders returned services.
-            //
-            // Usage: ensure the HTML snippet for the suggestion UI (suggestionPrompt, suggestBtn, etc.)
-            // exists in the page (see earlier provided template fragment).
-            //
-            // Defaults to current origin if window.BASE_URL is not set.
+            // It POSTs { prompt, name, email } as JSON to {BASE_URL}/suggestion (name/email taken from booking form if present).
+            // Safe: waits for DOMContentLoaded before querying DOM.
+            // Updated: "Use selected services" now opens the booking confirmation overlay and pre-fills the confirmation UI.
 
-            (() => {
+            (function () {
             const BASE_URL = (window.BASE_URL && String(window.BASE_URL).replace(/\/$/, '')) || window.location.origin;
 
-            // DOM refs
-            const promptEl = document.getElementById('suggestionPrompt');
-            const suggestBtn = document.getElementById('suggestBtn');
-            const clearBtn = document.getElementById('clearSuggestions');
-            const statusEl = document.getElementById('suggestionStatus');
-            const resultsWrap = document.getElementById('suggestionResults');
-            const suggestionsList = document.getElementById('suggestionsList');
-            const totalEl = document.getElementById('suggestedTotal');
-            const selectAllBtn = document.getElementById('selectAllBtn');
-            const applyBtn = document.getElementById('applySuggestionsBtn');
+            // Helper to find DOM elements after DOMContentLoaded
+            function init() {
+                // DOM refs
+                const promptEl = document.getElementById('suggestionPrompt');
+                const suggestBtn = document.getElementById('suggestBtn');
+                const clearBtn = document.getElementById('clearSuggestions');
+                const statusEl = document.getElementById('suggestionStatus');
+                const resultsWrap = document.getElementById('suggestionResults');
+                const suggestionsList = document.getElementById('suggestionsList');
+                const totalEl = document.getElementById('suggestedTotal');
+                const selectAllBtn = document.getElementById('selectAllBtn');
+                const applyBtn = document.getElementById('applySuggestionsBtn');
 
-            // Booking form fields that we will prefill / populate hidden inputs for
-            const bookingNameInput = document.getElementById('name');
-            const bookingEmailInput = document.getElementById('email');
-            const bookingPhoneInput = document.getElementById('phone');
-            const bookingSymptomsInput = document.getElementById('symptoms');
+                // Booking form fields (used to include name/email in suggestion request)
+                const bookingNameInput = document.getElementById('name');
+                const bookingEmailInput = document.getElementById('email');
+                const bookingPhoneInput = document.getElementById('phone');
+                const bookingSymptomsInput = document.getElementById('symptoms');
 
-            // Hidden fields used when submitting to /post_session
-            const hiddenServicesInput = document.getElementById('hidden-services');
-            const hiddenBillInput = document.getElementById('hidden-bill');
-            const hiddenNameInput = document.getElementById('hidden-name');
-            const hiddenEmailInput = document.getElementById('hidden-email');
-            const hiddenPhoneInput = document.getElementById('hidden-phone');
-            const hiddenSymptomsInput = document.getElementById('hidden-symptoms');
+                // Hidden fields used when submitting to /post_session
+                const hiddenServicesInput = document.getElementById('hidden-services');
+                const hiddenBillInput = document.getElementById('hidden-bill');
+                const hiddenNameInput = document.getElementById('hidden-name');
+                const hiddenEmailInput = document.getElementById('hidden-email');
+                const hiddenPhoneInput = document.getElementById('hidden-phone');
+                const hiddenSymptomsInput = document.getElementById('hidden-symptoms');
 
-            let currentSuggestions = []; // normalized suggestions: { id, name, price, description, score? }
+                // Booking confirmation overlay elements (to show and prefill)
+                const bookingConfirmationOverlay = document.getElementById('bookingConfirmationOverlay');
+                const closeBookingConfirmationOverlay = document.getElementById('closeBookingConfirmationOverlay');
+                const confirmedServiceIcons = document.getElementById('confirmedServiceIcons');
+                const confirmName = document.getElementById('confirmName');
+                const confirmEmail = document.getElementById('confirmEmail');
+                const confirmPhone = document.getElementById('confirmPhone');
+                const confirmSymptoms = document.getElementById('confirmSymptoms');
+                const confirmBill = document.getElementById('confirmBill');
 
-            function setStatus(text, isError = false) {
+                let currentSuggestions = []; // normalized suggestions: { id, name, price, description, score? }
+                let returnedTotal = null; // if backend returns a top-level total, store it
+
+                function setStatus(text, isError = false) {
                 if (!statusEl) return;
                 statusEl.textContent = text || '';
                 statusEl.style.color = isError ? '#ff7b7b' : '';
-            }
+                }
 
-            function formatCurrency(n) {
+                function formatCurrency(n) {
                 if (isNaN(n)) n = 0;
                 return '₦' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
+                }
 
-            function computeTotal(selectedIds = null) {
+                function computeTotal(selectedIds = null) {
+                // if backend provided a total, prefer it when all items are selected
+                if (returnedTotal != null && (selectedIds === null || selectedIds.length === currentSuggestions.length)) {
+                    return Number(returnedTotal);
+                }
                 const items = currentSuggestions.filter(s => {
-                if (!selectedIds) return true;
-                return selectedIds.includes(String(s.id));
+                    if (!selectedIds) return true;
+                    return selectedIds.includes(String(s.id));
                 });
                 return items.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
-            }
+                }
 
-            function normalizeResponse(data) {
-                // Accept several shapes: { services: [...] }, { suggestions: [...] }, or an array directly.
+                function normalizeResponse(data) {
+                // Accept several shapes:
+                // 1) { services: { services: [ ... ] }, total: 123 }
+                // 2) { services: [ ... ], total: 123 }
+                // 3) { suggestions: [...] }
+                // 4) array directly
                 let list = [];
-                if (!data) return list;
-                if (Array.isArray(data)) list = data;
-                else if (Array.isArray(data.services)) list = data.services;
-                else if (Array.isArray(data.suggestions)) list = data.suggestions;
-                else if (Array.isArray(data.results)) list = data.results;
-                else {
-                // try to find first array field
-                for (const k of Object.keys(data)) {
+
+                // grab top-level total if present
+                returnedTotal = null;
+                if (data && (data.total !== undefined && data.total !== null)) {
+                    returnedTotal = Number(data.total);
+                }
+
+                // case: data.services.services
+                if (data && data.services && Array.isArray(data.services.services)) {
+                    list = data.services.services;
+                }
+                // case: data.services is array
+                else if (data && data.services && Array.isArray(data.services)) {
+                    list = data.services;
+                }
+                // case: data.suggestions
+                else if (data && data.suggestions && Array.isArray(data.suggestions)) {
+                    list = data.suggestions;
+                }
+                // case: data.results
+                else if (data && data.results && Array.isArray(data.results)) {
+                    list = data.results;
+                }
+                // data is an array itself
+                else if (Array.isArray(data)) {
+                    list = data;
+                } else {
+                    // try to find first array property
+                    for (const k of Object.keys(data || {})) {
                     if (Array.isArray(data[k])) {
-                    list = data[k];
-                    break;
+                        list = data[k];
+                        break;
+                    }
                     }
                 }
+
+                // normalize each item to have id, name, price, description
+                return (list || []).map((item, idx) => {
+                    const priceRaw = item.price ?? item.amount ?? item.cost ?? item.value ?? 0;
+                    const priceNum = Number(priceRaw);
+                    return {
+                    id: item.id ?? item.service_id ?? item._id ?? item.name ?? `s-${idx}`,
+                    name: item.name ?? item.title ?? item.service ?? `Service ${idx + 1}`,
+                    price: isNaN(priceNum) ? 0 : priceNum,
+                    description: item.description ?? item.desc ?? item.summary ?? '',
+                    score: item.score ?? item.confidence ?? null
+                    };
+                });
                 }
 
-                // Normalize each item to have id, name, price, description
-                return list.map(item => ({
-                id: item.id ?? item.service_id ?? item._id ?? item.name, // fallback to name if no id
-                name: item.name ?? item.title ?? item.service ?? `Service ${item.id ?? ''}`,
-                price: Number(item.price ?? item.amount ?? item.cost ?? 0),
-                description: item.description ?? item.desc ?? item.summary ?? '',
-                score: item.score ?? item.confidence ?? null
-                }));
-            }
-
-            function renderSuggestions(list) {
+                function renderSuggestions(list) {
                 if (!suggestionsList) return;
                 suggestionsList.innerHTML = '';
 
                 if (!list || list.length === 0) {
-                suggestionsList.innerHTML = '<p class="text-gray-400">No suggestions found for that prompt.</p>';
-                totalEl && (totalEl.textContent = formatCurrency(0));
-                resultsWrap && resultsWrap.classList.remove('hidden');
-                return;
+                    suggestionsList.innerHTML = '<p class="text-gray-400">No suggestions found for that prompt.</p>';
+                    totalEl && (totalEl.textContent = formatCurrency(0));
+                    resultsWrap && resultsWrap.classList.remove('hidden');
+                    return;
                 }
 
                 list.forEach(item => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'p-3 rounded-md bg-[#1A1A2E] border border-[#0F1E5E] flex items-start gap-3';
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'p-3 rounded-md bg-[#1A1A2E] border border-[#0F1E5E] flex items-start gap-3';
 
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.value = item.id;
-                checkbox.className = 'suggestion-checkbox mt-1';
-                checkbox.checked = true;
-                checkbox.style.width = '18px';
-                checkbox.style.height = '18px';
-                checkbox.setAttribute('aria-label', `Select ${item.name}`);
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = item.id;
+                    checkbox.className = 'suggestion-checkbox mt-1';
+                    checkbox.checked = true;
+                    checkbox.style.width = '18px';
+                    checkbox.style.height = '18px';
+                    checkbox.setAttribute('aria-label', `Select ${item.name}`);
 
-                const content = document.createElement('div');
-                content.className = 'flex-1';
+                    const content = document.createElement('div');
+                    content.className = 'flex-1';
 
-                const title = document.createElement('div');
-                title.className = 'flex items-center justify-between';
-                const leftTitle = document.createElement('span');
-                leftTitle.className = 'text-white font-semibold';
-                leftTitle.textContent = item.name;
-                const rightPrice = document.createElement('span');
-                rightPrice.className = 'text-[#E00000] font-bold';
-                rightPrice.textContent = formatCurrency(item.price);
+                    const title = document.createElement('div');
+                    title.className = 'flex items-center justify-between';
+                    const leftTitle = document.createElement('span');
+                    leftTitle.className = 'text-white font-semibold';
+                    leftTitle.textContent = item.name;
+                    const rightPrice = document.createElement('span');
+                    rightPrice.className = 'text-[#E00000] font-bold';
+                    rightPrice.textContent = formatCurrency(item.price);
 
-                title.appendChild(leftTitle);
-                title.appendChild(rightPrice);
+                    title.appendChild(leftTitle);
+                    title.appendChild(rightPrice);
 
-                const desc = document.createElement('p');
-                desc.className = 'text-gray-400 text-sm mt-1';
-                desc.textContent = item.description || '';
+                    const desc = document.createElement('p');
+                    desc.className = 'text-gray-400 text-sm mt-1';
+                    desc.textContent = item.description || '';
 
-                content.appendChild(title);
-                content.appendChild(desc);
+                    content.appendChild(title);
+                    content.appendChild(desc);
 
-                // optional confidence badge
-                if (item.score !== null && item.score !== undefined) {
+                    // optional confidence badge
+                    if (item.score !== null && item.score !== undefined) {
                     const conf = document.createElement('div');
                     conf.className = 'text-xs text-gray-300 mt-2';
                     let scoreText = '';
                     try {
-                    const percent = Number(item.score) <= 1 ? Number(item.score) * 100 : Number(item.score);
-                    scoreText = `Confidence: ${Math.round(percent)}%`;
+                        const percent = Number(item.score) <= 1 ? Number(item.score) * 100 : Number(item.score);
+                        scoreText = `Confidence: ${Math.round(percent)}%`;
                     } catch {
-                    scoreText = `Confidence: ${String(item.score)}`;
+                        scoreText = `Confidence: ${String(item.score)}`;
                     }
                     conf.textContent = scoreText;
                     content.appendChild(conf);
-                }
+                    }
 
-                wrapper.appendChild(checkbox);
-                wrapper.appendChild(content);
-                suggestionsList.appendChild(wrapper);
+                    wrapper.appendChild(checkbox);
+                    wrapper.appendChild(content);
+                    suggestionsList.appendChild(wrapper);
 
-                checkbox.addEventListener('change', () => {
+                    checkbox.addEventListener('change', () => {
                     const checkedIds = Array.from(document.querySelectorAll('.suggestion-checkbox:checked')).map(c => c.value);
                     totalEl && (totalEl.textContent = formatCurrency(computeTotal(checkedIds)));
-                });
+                    });
                 });
 
-                // initial total
+                // initial total (if backend returned `total`, computeTotal will prefer it)
                 totalEl && (totalEl.textContent = formatCurrency(computeTotal()));
                 resultsWrap && resultsWrap.classList.remove('hidden');
-            }
+                }
 
-            async function doSuggest() {
+                async function doSuggest() {
                 if (!promptEl) return;
                 const prompt = (promptEl.value || '').trim();
                 if (!prompt) {
-                setStatus('Please type your ailment or describe the issue.', true);
-                return;
+                    setStatus('Please type your ailment or describe the issue.', true);
+                    return;
                 }
 
                 setStatus('Searching suggestions…');
@@ -1146,53 +1190,89 @@
                 clearBtn && (clearBtn.disabled = true);
 
                 try {
-                const res = await fetch(`${BASE_URL}/suggestion`, {
+                    // Build payload and include name/email from booking form if available
+                    const payload = { prompt };
+                    const nameVal = bookingNameInput?.value?.trim();
+                    const emailVal = bookingEmailInput?.value?.trim();
+                    if (nameVal) payload.name = nameVal;
+                    if (emailVal) payload.email = emailVal;
+
+                    const res = await fetch(`${BASE_URL}/suggestion`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt })
-                });
+                    body: JSON.stringify(payload)
+                    });
 
-                if (!res.ok) {
+                    if (!res.ok) {
                     const text = await res.text();
                     throw new Error(text || 'Request failed');
-                }
+                    }
 
-                const data = await res.json();
-                const list = normalizeResponse(data);
-                currentSuggestions = list;
-                renderSuggestions(currentSuggestions);
-                setStatus(`Found ${currentSuggestions.length} suggestion(s). Review & choose what you want.`);
+                    const data = await res.json();
+                    // normalize and render
+                    const list = normalizeResponse(data);
+                    currentSuggestions = list;
+                    renderSuggestions(currentSuggestions);
+
+                    // if backend returned a top-level total, show that explicitly
+                    if (returnedTotal != null) {
+                    setStatus(`Found ${currentSuggestions.length} suggestion(s). Estimated total: ${formatCurrency(returnedTotal)}.`);
+                    } else {
+                    setStatus(`Found ${currentSuggestions.length} suggestion(s). Review & choose what you want.`);
+                    }
                 } catch (err) {
-                console.error('Suggestion error:', err);
-                setStatus('Error getting suggestions. Try again later.', true);
-                if (resultsWrap) resultsWrap.classList.add('hidden');
+                    console.error('Suggestion error:', err);
+                    setStatus('Error getting suggestions. Try again later.', true);
+                    if (resultsWrap) resultsWrap.classList.add('hidden');
                 } finally {
-                suggestBtn && (suggestBtn.disabled = false);
-                clearBtn && (clearBtn.disabled = false);
+                    suggestBtn && (suggestBtn.disabled = false);
+                    clearBtn && (clearBtn.disabled = false);
                 }
-            }
+                }
 
-            function clearSuggestions() {
+                function clearSuggestions() {
                 if (promptEl) promptEl.value = '';
                 if (suggestionsList) suggestionsList.innerHTML = '';
                 if (resultsWrap) resultsWrap.classList.add('hidden');
                 setStatus('');
                 currentSuggestions = [];
+                returnedTotal = null;
                 totalEl && (totalEl.textContent = formatCurrency(0));
-            }
+                }
 
-            function selectAll(checked = true) {
+                function selectAll(checked = true) {
                 const boxes = document.querySelectorAll('.suggestion-checkbox');
                 boxes.forEach(b => b.checked = checked);
                 const selectedIds = Array.from(document.querySelectorAll('.suggestion-checkbox:checked')).map(c => c.value);
                 totalEl && (totalEl.textContent = formatCurrency(computeTotal(selectedIds)));
-            }
+                }
 
-            function applySelections() {
+                function showBookingConfirmationOverlay() {
+                if (!bookingConfirmationOverlay) return;
+                bookingConfirmationOverlay.classList.add('visible');
+                // scroll top of overlay content if needed
+                const content = bookingConfirmationOverlay.querySelector('.service-price-content, .booking-confirmation-content');
+                if (content) content.scrollTop = 0;
+                }
+
+                function hideBookingConfirmationOverlay() {
+                if (!bookingConfirmationOverlay) return;
+                bookingConfirmationOverlay.classList.remove('visible');
+                }
+
+                // Close overlay listener
+                if (closeBookingConfirmationOverlay) {
+                closeBookingConfirmationOverlay.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    hideBookingConfirmationOverlay();
+                });
+                }
+
+                function applySelections() {
                 const selected = Array.from(document.querySelectorAll('.suggestion-checkbox:checked')).map(c => c.value);
                 if (!selected || selected.length === 0) {
-                setStatus('Please select at least one service to proceed.', true);
-                return;
+                    setStatus('Please select at least one service to proceed.', true);
+                    return;
                 }
 
                 const total = computeTotal(selected);
@@ -1205,40 +1285,69 @@
                 if (hiddenPhoneInput && bookingPhoneInput) hiddenPhoneInput.value = bookingPhoneInput.value || '';
                 if (hiddenSymptomsInput && bookingSymptomsInput) hiddenSymptomsInput.value = bookingSymptomsInput.value || promptEl.value || '';
 
-                setStatus(`Selected ${selected.length} service(s). You can now proceed to booking/payment.`);
+                // Prefill the confirmation overlay fields
+                if (confirmName) confirmName.textContent = bookingNameInput?.value || hiddenNameInput?.value || '—';
+                if (confirmEmail) confirmEmail.textContent = bookingEmailInput?.value || hiddenEmailInput?.value || '—';
+                if (confirmPhone) confirmPhone.textContent = bookingPhoneInput?.value || hiddenPhoneInput?.value || '—';
+                if (confirmSymptoms) confirmSymptoms.textContent = bookingSymptomsInput?.value || hiddenSymptomsInput?.value || promptEl.value || '—';
+                if (confirmBill) confirmBill.textContent = formatCurrency(total);
+
+                // Populate confirmedServiceIcons with selected service cards
+                if (confirmedServiceIcons) {
+                    confirmedServiceIcons.innerHTML = ''; // clear
+                    const chosen = currentSuggestions.filter(s => selected.includes(String(s.id)));
+                    chosen.forEach(svc => {
+                    const el = document.createElement('div');
+                    el.className = 'flex items-center justify-between w-full p-2 bg-[#0F1E5E] rounded mb-2';
+                    el.innerHTML = `<div class="text-white font-medium">${svc.name}</div>
+                                    <div class="text-[#E00000] font-semibold">${formatCurrency(svc.price)}</div>`;
+                    confirmedServiceIcons.appendChild(el);
+                    });
+                }
+
+                setStatus(`Selected ${selected.length} service(s). Showing confirmation...`);
+
+                // Show the booking confirmation overlay so user can confirm and submit
+                showBookingConfirmationOverlay();
 
                 // Integration hook: if gateway.js (or other) defines this function, call it
                 if (window.onSuggestedServicesSelected && typeof window.onSuggestedServicesSelected === 'function') {
-                try {
-                    window.onSuggestedServicesSelected(selected, total);
-                } catch (e) {
+                    try {
+                    window.onSuggestedServicesSelected(selected, total, currentSuggestions.slice());
+                    } catch (e) {
                     console.warn('onSuggestedServicesSelected hook error', e);
+                    }
                 }
                 }
-            }
 
-            // keyboard shortcut: Ctrl+Enter to suggest
-            function onPromptKey(e) {
+                function onPromptKey(e) {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                doSuggest();
+                    e.preventDefault();
+                    doSuggest();
                 }
-            }
+                }
 
-            // Attach listeners
-            if (suggestBtn) suggestBtn.addEventListener('click', (e) => { e.preventDefault(); doSuggest(); });
-            if (clearBtn) clearBtn.addEventListener('click', (e) => { e.preventDefault(); clearSuggestions(); });
-            if (selectAllBtn) selectAllBtn.addEventListener('click', (e) => { e.preventDefault(); selectAll(true); });
-            if (applyBtn) applyBtn.addEventListener('click', (e) => { e.preventDefault(); applySelections(); });
-            if (promptEl) promptEl.addEventListener('keydown', onPromptKey);
+                // Attach listeners
+                if (suggestBtn) suggestBtn.addEventListener('click', (e) => { e.preventDefault(); doSuggest(); });
+                if (clearBtn) clearBtn.addEventListener('click', (e) => { e.preventDefault(); clearSuggestions(); });
+                if (selectAllBtn) selectAllBtn.addEventListener('click', (e) => { e.preventDefault(); selectAll(true); });
+                if (applyBtn) applyBtn.addEventListener('click', (e) => { e.preventDefault(); applySelections(); });
+                if (promptEl) promptEl.addEventListener('keydown', onPromptKey);
 
-            // expose a small API for debugging / other integration
-            window.SuggestionsWidget = {
+                // expose small API
+                window.SuggestionsWidget = {
                 suggest: doSuggest,
                 clear: clearSuggestions,
                 getCurrent: () => currentSuggestions
-            };
+                };
+            } // init end
 
+            // init when DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
             })();
 
 

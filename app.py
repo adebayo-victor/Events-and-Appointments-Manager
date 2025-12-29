@@ -943,47 +943,49 @@ def search_patients():
 #updates start from here, first update, AI consultancy
 #this function generates the csv,dont mind the variable name in it, it is from FLING
 def generate_csv(prompt):
-    """
-    Sends a prompt to the Gemini API to request a full HTML template.
-    """
-    headers = {
-        "Content-Type": "application/json"
-    }
-    params = {
-        "key": os.environ.get("gemini_key")
-    }
-    
-    # The payload is structured to ask the model for a text response
+    headers = {"Content-Type": "application/json"}
+    params = {"key": "AIzaSyBh-OKy94JDVZrRk_yBjNzYycbESqf6SFI"}
+
     data = {
         "contents": [
             {
-                "parts": [
-                    {
-                        "text": prompt
-                    }
-                ]
+                "parts": [{"text": prompt}]
             }
         ]
     }
 
     try:
-        response = requests.post(os.environ.get('GEMINI_URL'), headers=headers, params=params, json=data, timeout=120)
-        
-        # Raise an exception for bad status codes
-        response.raise_for_status()
+        res = requests.post(
+            os.environ.get("GEMINI_URL"),
+            headers=headers,
+            params=params,
+            json=data,
+            timeout=120
+        )
 
-        # Extract the HTML text from the response
-        response_json = response.json()
-        if 'candidates' in response_json and len(response_json['candidates']) > 0:
-            html_template = response_json['candidates'][0]['content']['parts'][0]['text']
-            return html_template
-        else:
-            print("Error: No candidates found in the response.")
+        if res.status_code != 200:
+            print("Gemini error:", res.status_code, res.text)
             return None
 
+        r = res.json()
+
+        candidates = r.get("candidates")
+        if not candidates:
+            print("No candidates:", r)
+            return None
+
+        parts = candidates[0].get("content", {}).get("parts")
+        if not parts or "text" not in parts[0]:
+            print("Malformed response:", r)
+            return None
+
+        return parts[0]["text"]
+
     except requests.exceptions.RequestException as e:
-        print(f"Network or API Error: {e}")
+        print("Request failed:", e)
         return None
+
+        
 @app.route("/suggestion", methods=["POST"])
 def suggestion():
     if request.method == "POST":
@@ -1003,7 +1005,7 @@ def suggestion():
             entry = data.split(',')
             services_info['services'].append({'name':entry[0], 'price':entry[1]})
         #calculate total amount
-            total+=entry[1]
+            total+=int(entry[1])
         #return services, prices and total
         return jsonify({'services':services_info,'total':total})
 
