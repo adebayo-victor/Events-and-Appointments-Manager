@@ -1001,7 +1001,7 @@ def suggestion():
         split_data = raw_csv.split("\n")
         for data in split_data:
             entry = data.split(',')
-            services_info['services'].append{'name':entry[0], 'price':entry[1]}
+            services_info['services'].append({'name':entry[0], 'price':entry[1]})
         #calculate total amount
             total+=entry[1]
         #return services, prices and total
