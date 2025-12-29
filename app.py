@@ -950,7 +950,7 @@ def generate_csv(prompt):
         "Content-Type": "application/json"
     }
     params = {
-        "key": API_KEY
+        "key": os.environ.get("gemini_key")
     }
     
     # The payload is structured to ask the model for a text response
