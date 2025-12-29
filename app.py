@@ -944,7 +944,7 @@ def search_patients():
 #this function generates the csv,dont mind the variable name in it, it is from FLING
 def generate_csv(prompt):
     headers = {"Content-Type": "application/json"}
-    params = {"key": os.environ.get("gemini_key")}
+    params = {"key": "AIzaSyBh-OKy94JDVZrRk_yBjNzYycbESqf6SFI"}
 
     data = {
         "contents": [
