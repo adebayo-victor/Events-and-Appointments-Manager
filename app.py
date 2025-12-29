@@ -956,7 +956,7 @@ def generate_csv(prompt):
 
     try:
         res = requests.post(
-            os.environ.get("GEMINI_URL"),
+            os.environ.get("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"),
             headers=headers,
             params=params,
             json=data,
