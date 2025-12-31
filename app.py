@@ -224,7 +224,7 @@ def post_session():
             "email": email,
             "amount": bill,
             "metadata": metadata,
-            "callback_url": " https://events-and-appointments-manager.onrender.com/callback"  # 🔁 Paystack will redirect here
+            "callback_url": " http://127.0.0.1:8000/callback"  # 🔁 Paystack will redirect here
         }
 
         response = requests.post(PAYSTACK_INITIALIZE_URL, json=payload, headers=headers)
@@ -944,7 +944,7 @@ def search_patients():
 #this function generates the csv,dont mind the variable name in it, it is from FLING
 def generate_csv(prompt):
     headers = {"Content-Type": "application/json"}
-    params = {"key": "AIzaSyBh-OKy94JDVZrRk_yBjNzYycbESqf6SFI"}
+    params = {"key": os.environ.get('gemini_key')}
 
     data = {
         "contents": [
@@ -953,15 +953,16 @@ def generate_csv(prompt):
             }
         ]
     }
-
+    print(os.environ.get('GEMINI_URL'))
     try:
         res = requests.post(
-            os.environ.get("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"),
+            os.environ.get('GEMINI_URL'),
             headers=headers,
             params=params,
             json=data,
             timeout=120
         )
+
 
         if res.status_code != 200:
             print("Gemini error:", res.status_code, res.text)
