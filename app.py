@@ -193,6 +193,7 @@ PAYSTACK_INITIALIZE_URL = 'https://api.paystack.co/transaction/initialize'
 def post_session():
     try:
         data = request.form # This is correct for ImmutableMultiDict
+
         # Required form fields
         name = data.get('name')
         print(name)
@@ -202,6 +203,7 @@ def post_session():
         symptoms = data.get('symptoms')
         services = data.get('services')
         bill = int(data.get('bill')) * 100  # 💰 Convert to Kobo
+        print(data.get("bill"))
         existing_patient = db.execute('SELECT * FROM patients WHERE email = ?', email)
         if not existing_patient:
             return {"error": "Patient not in database"}
@@ -224,7 +226,7 @@ def post_session():
             "email": email,
             "amount": bill,
             "metadata": metadata,
-            "callback_url": " http://127.0.0.1:8000/callback"  # 🔁 Paystack will redirect here
+            "callback_url": " https://events-and-appointments-manager.onrender.com/callback"  # 🔁 Paystack will redirect here
         }
 
         response = requests.post(PAYSTACK_INITIALIZE_URL, json=payload, headers=headers)
