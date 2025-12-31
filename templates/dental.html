@@ -1279,7 +1279,7 @@
 
                 // Populate hidden inputs if present
                 if (hiddenServicesInput) hiddenServicesInput.value = selected.join(',');
-                if (hiddenBillInput) hiddenBillInput.value = Number(total).toFixed(0);
+                if (hiddenBillInput) hiddenBillInput.value = Number(total);
                 if (hiddenNameInput && bookingNameInput) hiddenNameInput.value = bookingNameInput.value || '';
                 if (hiddenEmailInput && bookingEmailInput) hiddenEmailInput.value = bookingEmailInput.value || '';
                 if (hiddenPhoneInput && bookingPhoneInput) hiddenPhoneInput.value = bookingPhoneInput.value || '';
