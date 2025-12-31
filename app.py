@@ -997,7 +997,11 @@ def suggestion():
         #create suitable prompt with list of services available in database
         ailment = data['prompt']
         services = db.execute("SELECT name,price  FROM services")
-        prompt = f"Act as an AI Consultant. Analyze my ailment: [{ailment}]. Cross-reference this with our service catalog: [{services}]. Based on your consultation, identify the necessary and suggested services. Output the result strictly as a raw CSV string with no headers, no markdown blocks, and no conversational text. Use this format: service_name,price_in_kobo,is_suggested"
+        #convert all prices from float to int
+        for service in services:
+            service['price']=str(service['price']).replace(".0", "")
+        prompt = f"Act as an AI Consultant. Analyze my ailment: [{ailment}]. Cross-reference this with our service catalog: [{services}]. Based on your consultation, identify the necessary and suggested services. Output the result strictly as a raw CSV string with no headers, no markdown blocks, and no conversational text. Use this format: service_name,price,is_suggested"
+        print(prompt)
         #send prompt to API
         raw_csv = generate_csv(prompt)
         #receive response as raw csv format , convert into workable form
