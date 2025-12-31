@@ -961,8 +961,7 @@ def generate_csv(prompt):
             os.environ.get('GEMINI_URL'),
             headers=headers,
             params=params,
-            json=data,
-            timeout=120
+            json=data
         )
 
 
